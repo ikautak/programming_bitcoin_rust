@@ -1,62 +1,81 @@
-use primitive_types::{U256, U512};
+use num_traits::NumAssign;
 use std::cmp::PartialEq;
-use std::convert::TryFrom;
-use std::ops::{Add, Mul, Sub};
+use std::fmt::Debug;
+use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Debug, Copy, Clone)]
-pub struct FieldElement {
-    pub num: U256,
-    pub prime: U256,
+pub struct FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
+    pub num: T,
+    pub prime: T,
 }
 
-impl FieldElement {
-    pub fn new(num: U256, prime: U256) -> Self {
+impl<T> FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
+    pub fn new(num: T, prime: T) -> Self {
         if num >= prime {
-            panic!("Num {} not in field range 0 to {}", num, prime - 1);
+            panic!(
+                "Num {:?} not in field range 0 to {:?}",
+                num,
+                prime - T::one()
+            );
         }
 
         Self { num, prime }
     }
 
-    pub fn pow(&mut self, mut exp: u64) {
-        let mut result = FieldElement::new(U256::from(1u64), self.prime);
-        while exp > 0 {
-            if exp & 1 == 1 {
+    pub fn pow(&mut self, mut exp: T) {
+        let zero = T::zero();
+        let one = T::one();
+        let mut result = FieldElement::new(one, self.prime);
+
+        exp = exp % (self.prime - one);
+
+        while exp > zero {
+            if exp % (one + one) == one {
                 result = result * *self;
-                println!("result {:?}", self);
             }
             *self = *self * *self;
-            println!("self {:?}", self);
-            exp /= 2;
+            exp /= one + one;
         }
         *self = result
     }
 }
 
-impl PartialEq for FieldElement {
+impl<T> PartialEq for FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
     fn eq(&self, rhs: &Self) -> bool {
         return self.prime == rhs.prime && self.num == rhs.num;
     }
 }
 
-impl Add for FieldElement {
+impl<T> Add for FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
         if self.prime != rhs.prime {
             panic!("Cannot ad two numbers in different Fields");
         }
 
-        let num = (U512::from(self.num) + U512::from(rhs.num)) % self.prime;
-        let num = U256::try_from(num).unwrap();
-
         Self {
-            num,
+            num: (self.num + rhs.num) % self.prime,
             prime: self.prime,
         }
     }
 }
 
-impl Sub for FieldElement {
+impl<T> Sub for FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
         if self.prime != rhs.prime {
@@ -75,32 +94,49 @@ impl Sub for FieldElement {
     }
 }
 
-impl Mul for FieldElement {
+impl<T> Mul for FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         if self.prime != rhs.prime {
             panic!("Cannot ad two numbers in different Fields");
         }
 
-        let num = (U512::from(self.num) * U512::from(rhs.num)) % self.prime;
-        let num = U256::try_from(num).unwrap();
         Self {
-            num,
+            num: (self.num * rhs.num) % self.prime,
             prime: self.prime,
         }
+    }
+}
+
+impl<T> Div for FieldElement<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+{
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        if self.prime != rhs.prime {
+            panic!("Cannot ad two numbers in different Fields");
+        }
+
+        let mut other = rhs.clone();
+        let one = T::one();
+        other.pow(self.prime - one - one);
+        self * other
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::FieldElement;
-    use primitive_types::U256;
 
     #[test]
     fn test_ne() {
-        let a = FieldElement::new(U256::from(2u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(2u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(17u32), U256::from(31u32));
+        let a = FieldElement::new(2i32, 31i32);
+        let b = FieldElement::new(2i32, 31i32);
+        let c = FieldElement::new(17i32, 31i32);
         assert_eq!(a, b);
         assert!(a != c);
         assert!(b != c);
@@ -108,49 +144,61 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let a = FieldElement::new(U256::from(2u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(15u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(17u32), U256::from(31u32));
+        let a = FieldElement::new(2i32, 31i32);
+        let b = FieldElement::new(15i32, 31i32);
+        let c = FieldElement::new(17i32, 31i32);
         assert_eq!(a + b, c);
 
-        let a = FieldElement::new(U256::from(17u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(21u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(7u32), U256::from(31u32));
+        let a = FieldElement::new(17i32, 31i32);
+        let b = FieldElement::new(21i32, 31i32);
+        let c = FieldElement::new(7i32, 31i32);
         assert_eq!(a + b, c);
     }
 
     #[test]
     fn test_sub() {
-        let a = FieldElement::new(U256::from(29u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(4u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(25u32), U256::from(31u32));
+        let a = FieldElement::new(29i32, 31i32);
+        let b = FieldElement::new(4i32, 31i32);
+        let c = FieldElement::new(25i32, 31i32);
         assert_eq!(a - b, c);
 
-        let a = FieldElement::new(U256::from(15u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(30u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(16u32), U256::from(31u32));
+        let a = FieldElement::new(15i32, 31i32);
+        let b = FieldElement::new(30i32, 31i32);
+        let c = FieldElement::new(16i32, 31i32);
         assert_eq!(a - b, c);
     }
 
     #[test]
     fn test_mul() {
-        let a = FieldElement::new(U256::from(24u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(19u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(22u32), U256::from(31u32));
+        let a = FieldElement::new(24i32, 31i32);
+        let b = FieldElement::new(19i32, 31i32);
+        let c = FieldElement::new(22i32, 31i32);
         assert_eq!(a * b, c);
     }
 
     #[test]
     fn test_pow() {
-        let mut a = FieldElement::new(U256::from(17u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(15u32), U256::from(31u32));
-        a.pow(3);
+        let mut a = FieldElement::new(17i32, 31i32);
+        let b = FieldElement::new(15i32, 31i32);
+        a.pow(3i32);
         assert_eq!(a, b);
 
-        let mut a = FieldElement::new(U256::from(5u32), U256::from(31u32));
-        let b = FieldElement::new(U256::from(18u32), U256::from(31u32));
-        let c = FieldElement::new(U256::from(16u32), U256::from(31u32));
-        a.pow(5);
+        let mut a = FieldElement::new(5i32, 31i32);
+        let b = FieldElement::new(18i32, 31i32);
+        let c = FieldElement::new(16i32, 31i32);
+        a.pow(5i32);
         assert_eq!(a * b, c);
+    }
+
+    #[test]
+    fn test_div() {
+        let a = FieldElement::new(3i32, 31i32);
+        let b = FieldElement::new(24i32, 31i32);
+        let c = FieldElement::new(4i32, 31i32);
+        assert_eq!(a / b, c);
+        let a = FieldElement::new(1i32, 31i32);
+        let b = FieldElement::new(17i32, 31i32);
+        let c = FieldElement::new(29i32, 31i32);
+        assert_eq!(a / b / b / b, c);
     }
 }
