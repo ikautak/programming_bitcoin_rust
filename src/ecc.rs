@@ -128,12 +128,135 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Point<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd,
+{
+    pub x: Option<T>,
+    pub y: Option<T>,
+    pub a: T,
+    pub b: T,
+}
+
+impl<T> Point<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Copy,
+{
+    pub fn new(x: Option<T>, y: Option<T>, a: T, b: T) -> Self {
+        if x == None && y == None {
+            // Infinity
+            return Self {
+                x: None,
+                y: None,
+                a,
+                b,
+            };
+        }
+
+        let x = x.unwrap();
+        let y = y.unwrap();
+
+        if y * y != x * x * x + a * x + b {
+            panic!("{:?} {:?} is not on the curve", x, y);
+        }
+
+        Self {
+            x: Some(x),
+            y: Some(y),
+            a,
+            b,
+        }
+    }
+}
+
+impl<T> PartialEq for Point<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd,
+{
+    fn eq(&self, rhs: &Self) -> bool {
+        return self.x == rhs.x && self.y == rhs.y && self.a == rhs.a && self.b == rhs.b;
+    }
+}
+
+impl<T> Add for Point<T>
+where
+    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Copy,
+{
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        if self.a != rhs.a || self.b != rhs.b {
+            panic!("Points {:?} {:?} are not on the same curve", self.a, self.b);
+        }
+
+        if self.x.is_none() {
+            return rhs;
+        }
+        if rhs.x.is_none() {
+            return self;
+        }
+
+        let x0 = self.x.unwrap();
+        let x1 = rhs.x.unwrap();
+        let y0 = self.y.unwrap();
+        let y1 = rhs.y.unwrap();
+
+        // Case 1: x is equal and y is not equal -> Infinity
+        if x0 == x1 && y0 != y1 {
+            return Self {
+                x: None,
+                y: None,
+                a: self.a,
+                b: self.b,
+            };
+        }
+
+        // Case 2: x is not equal
+        if x0 != x1 {
+            let s = (y1 - y0) / (x1 - x0);
+            let x = s * s - x0 - x1;
+            let y = s * (x0 - x) - y0;
+            return Self {
+                x: Some(x),
+                y: Some(y),
+                a: self.a,
+                b: self.b,
+            };
+        }
+
+        // Case 4: tangent to vertical line -> Infinity
+        if self == rhs && y0 == (y1 - y1) {
+            return Self {
+                x: None,
+                y: None,
+                a: self.a,
+                b: self.b,
+            };
+        }
+
+        // Case 3: self == other
+        let one = x0 - x0;
+        let two = one + one;
+        let three = two + one;
+        let s = (three * x0 * x0 + self.a) / (two * y0);
+        let x = s * s - two * x0;
+        let y = s * (x0 - x) - y0;
+        Self {
+            x: Some(x),
+            y: Some(y),
+            a: self.a,
+            b: self.b,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::FieldElement;
+    use super::Point;
 
     #[test]
-    fn test_ne() {
+    fn test_fe_ne() {
         let a = FieldElement::new(2i32, 31i32);
         let b = FieldElement::new(2i32, 31i32);
         let c = FieldElement::new(17i32, 31i32);
@@ -143,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add() {
+    fn test_fe_add() {
         let a = FieldElement::new(2i32, 31i32);
         let b = FieldElement::new(15i32, 31i32);
         let c = FieldElement::new(17i32, 31i32);
@@ -156,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sub() {
+    fn test_fe_sub() {
         let a = FieldElement::new(29i32, 31i32);
         let b = FieldElement::new(4i32, 31i32);
         let c = FieldElement::new(25i32, 31i32);
@@ -169,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mul() {
+    fn test_fe_mul() {
         let a = FieldElement::new(24i32, 31i32);
         let b = FieldElement::new(19i32, 31i32);
         let c = FieldElement::new(22i32, 31i32);
@@ -177,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pow() {
+    fn test_fe_pow() {
         let mut a = FieldElement::new(17i32, 31i32);
         let b = FieldElement::new(15i32, 31i32);
         a.pow(3i32);
@@ -191,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn test_div() {
+    fn test_fe_div() {
         let a = FieldElement::new(3i32, 31i32);
         let b = FieldElement::new(24i32, 31i32);
         let c = FieldElement::new(4i32, 31i32);
@@ -200,5 +323,34 @@ mod tests {
         let b = FieldElement::new(17i32, 31i32);
         let c = FieldElement::new(29i32, 31i32);
         assert_eq!(a / b / b / b, c);
+    }
+
+    #[test]
+    fn test_point_ne() {
+        let a = Point::new(Some(3), Some(-7), 5, 7);
+        let b = Point::new(Some(18), Some(77), 5, 7);
+        assert!(a != b);
+    }
+
+    #[test]
+    fn test_point_on_curve() {
+        let _a = Point::new(Some(3), Some(-7), 5, 7);
+        let _b = Point::new(Some(18), Some(77), 5, 7);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_point_on_curve_panic() {
+        let _a = Point::new(Some(-2), Some(4), 5, 7);
+    }
+
+    #[test]
+    fn test_point_add0() {
+        let a = Point::new(None, None, 5, 7);
+        let b = Point::new(Some(2), Some(5), 5, 7);
+        let c = Point::new(Some(2), Some(-5), 5, 7);
+        assert_eq!(a + b, b);
+        assert_eq!(b + a, b);
+        assert_eq!(b + c, a);
     }
 }
