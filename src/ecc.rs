@@ -144,7 +144,7 @@ where
     T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Copy,
 {
     pub fn new(x: Option<T>, y: Option<T>, a: T, b: T) -> Self {
-        if x == None && y == None {
+        if x.is_none() && y.is_none() {
             // Infinity
             return Self {
                 x: None,
@@ -235,7 +235,7 @@ where
         }
 
         // Case 3: self == other
-        let one = x0 - x0;
+        let one = x0 / x0;
         let two = one + one;
         let three = two + one;
         let s = (three * x0 * x0 + self.a) / (two * y0);
@@ -352,5 +352,20 @@ mod tests {
         assert_eq!(a + b, b);
         assert_eq!(b + a, b);
         assert_eq!(b + c, a);
+    }
+
+    #[test]
+    fn test_point_add1() {
+        let a = Point::new(Some(3), Some(7), 5, 7);
+        let b = Point::new(Some(-1), Some(-1), 5, 7);
+        let c = Point::new(Some(2), Some(-5), 5, 7);
+        assert_eq!(a + b, c);
+    }
+
+    #[test]
+    fn test_point_add2() {
+        let a = Point::new(Some(-1), Some(1), 5, 7);
+        let b = Point::new(Some(18), Some(-77), 5, 7);
+        assert_eq!(a + a, b);
     }
 }
