@@ -1,4 +1,6 @@
-use num_traits::NumAssign;
+use num_traits::{Num, NumOps};
+use once_cell::sync::Lazy;
+use primitive_types::U512;
 use std::cmp::PartialEq;
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
@@ -6,7 +8,7 @@ use std::ops::{Add, Div, Mul, Sub};
 #[derive(Debug, Copy, Clone)]
 pub struct FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     pub num: T,
     pub prime: T,
@@ -14,23 +16,19 @@ where
 
 impl<T> FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     pub fn new(num: T, prime: T) -> Self {
         if num >= prime {
-            panic!(
-                "Num {:?} not in field range 0 to {:?}",
-                num,
-                prime - T::one()
-            );
+            panic!("Num {:?} not in field range 0 to {:?}", num, prime);
         }
 
         Self { num, prime }
     }
 
     pub fn pow(&mut self, mut exp: T) {
-        let zero = T::zero();
-        let one = T::one();
+        let zero = self.prime - self.prime;
+        let one = self.prime / self.prime;
         let mut result = FieldElement::new(one, self.prime);
 
         exp = exp % (self.prime - one);
@@ -40,7 +38,7 @@ where
                 result = result * *self;
             }
             *self = *self * *self;
-            exp /= one + one;
+            exp = exp / (one + one);
         }
         *self = result
     }
@@ -48,7 +46,7 @@ where
 
 impl<T> PartialEq for FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     fn eq(&self, rhs: &Self) -> bool {
         return self.prime == rhs.prime && self.num == rhs.num;
@@ -57,7 +55,7 @@ where
 
 impl<T> Add for FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
@@ -74,7 +72,7 @@ where
 
 impl<T> Sub for FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
@@ -96,7 +94,7 @@ where
 
 impl<T> Mul for FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
@@ -113,7 +111,7 @@ where
 
 impl<T> Div for FieldElement<T>
 where
-    T: NumAssign + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn div(self, rhs: Self) -> Self {
@@ -122,7 +120,7 @@ where
         }
 
         let mut other = rhs.clone();
-        let one = T::one();
+        let one = self.prime / self.prime;
         other.pow(self.prime - one - one);
         self * other
     }
@@ -272,7 +270,7 @@ where
         + PartialEq
         + std::fmt::Debug
         + Copy,
-    U: NumAssign + PartialOrd + Copy,
+    U: Num + PartialOrd + Copy,
 {
     type Output = Point<T>;
     fn mul(self, coefficient: U) -> Point<T> {
@@ -294,6 +292,17 @@ where
     }
 }
 
+static A: Lazy<U512> = Lazy::new(|| U512::from(0));
+static B: Lazy<U512> = Lazy::new(|| U512::from(7));
+static P: Lazy<U512> =
+    Lazy::new(|| U512::from(r"0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f"));
+static N: Lazy<U512> =
+    Lazy::new(|| U512::from(r"0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141"));
+
+type S256Field = FieldElement<U512>;
+pub struct S256Point {
+    point: Point<S256Field>,
+}
 #[cfg(test)]
 mod tests {
     use super::FieldElement;
