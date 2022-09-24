@@ -1,4 +1,4 @@
-use num_traits::{Num, NumOps};
+use num_traits::NumOps;
 use once_cell::sync::Lazy;
 use primitive_types::U512;
 use std::cmp::PartialEq;
@@ -270,7 +270,7 @@ where
         + PartialEq
         + std::fmt::Debug
         + Copy,
-    U: Num + PartialOrd + Copy,
+    U: NumOps + PartialOrd + Copy,
 {
     type Output = Point<T>;
     fn mul(self, coefficient: U) -> Point<T> {
@@ -278,8 +278,8 @@ where
         let mut current = self;
         let mut result = Point::new(None, None, self.a, self.b);
 
-        let zero = U::zero();
-        let one = U::one();
+        let zero = coef - coef;
+        let one = coef / coef; // FIXME
         let two = one + one;
         while coef > zero {
             if coef % two > zero {
@@ -300,13 +300,60 @@ static N: Lazy<U512> =
     Lazy::new(|| U512::from(r"0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141"));
 
 type S256Field = FieldElement<U512>;
+#[derive(Debug)]
 pub struct S256Point {
     point: Point<S256Field>,
 }
+
+impl S256Point {
+    pub fn new(x: U512, y: U512) -> Self {
+        let a = S256Field::new(*A, *P);
+        let b = S256Field::new(*B, *P);
+        let x = S256Field::new(x, *P);
+        let y = S256Field::new(y, *P);
+
+        Self {
+            point: Point::<S256Field>::new(Some(x), Some(y), a, b),
+        }
+    }
+
+    pub fn rmul(&self, coefficient: U512) -> Self {
+        let coef = coefficient % *N;
+        Self {
+            point: self.point * coef,
+        }
+    }
+}
+
+impl PartialEq for S256Point {
+    fn eq(&self, rhs: &Self) -> bool {
+        return self.point == rhs.point;
+    }
+}
+
+static GX: Lazy<U512> = Lazy::new(|| {
+    U512::from_str_radix(
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        16,
+    )
+    .unwrap()
+});
+static GY: Lazy<U512> = Lazy::new(|| {
+    U512::from_str_radix(
+        "483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8",
+        16,
+    )
+    .unwrap()
+});
+static G: Lazy<S256Point> = Lazy::new(|| S256Point::new(*GX, *GY));
 #[cfg(test)]
 mod tests {
     use super::FieldElement;
     use super::Point;
+    use super::S256Point;
+    use super::G;
+    use super::N;
+    use super::U512;
 
     #[test]
     fn test_fe_ne() {
@@ -530,5 +577,81 @@ mod tests {
         let p2 = Point::new(None, None, a, b);
 
         assert_eq!(p1 * s, p2);
+    }
+
+    //#[test]
+    //fn test_s256_order() {
+    //    let p = G.rmul(*N);
+    //    assert!(p.point.x == None);
+    //}
+
+    #[test]
+    fn test_s256_pubpoint() {
+        // write a test that tests the public point for the following
+        let points = vec![
+            // secret, x, y
+            (
+                U512::from(7i32),
+                U512::from_str_radix(
+                    "5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+                    16,
+                )
+                .unwrap(),
+                U512::from_str_radix(
+                    "6aebca40ba255960a3178d6d861a54dba813d0b813fde7b5a5082628087264da",
+                    16,
+                )
+                .unwrap(),
+            ),
+            (
+                U512::from(1485i32),
+                U512::from_str_radix(
+                    "c982196a7466fbbbb0e27a940b6af926c1a74d5ad07128c82824a11b5398afda",
+                    16,
+                )
+                .unwrap(),
+                U512::from_str_radix(
+                    "7a91f9eae64438afb9ce6448a1c133db2d8fb9254e4546b6f001637d50901f55",
+                    16,
+                )
+                .unwrap(),
+            ),
+            (
+                U512::from_str_radix("100000000000000000000000000000000", 16).unwrap(),
+                U512::from_str_radix(
+                    "8f68b9d2f63b5f339239c1ad981f162ee88c5678723ea3351b7b444c9ec4c0da",
+                    16,
+                )
+                .unwrap(),
+                U512::from_str_radix(
+                    "662a9f2dba063986de1d90c2b6be215dbbea2cfe95510bfdf23cbf79501fff82",
+                    16,
+                )
+                .unwrap(),
+            ),
+            (
+                U512::from_str_radix(
+                    "1000000000000000000000000000000000000000000000000000080000000",
+                    16,
+                )
+                .unwrap(),
+                U512::from_str_radix(
+                    "9577ff57c8234558f293df502ca4f09cbc65a6572c842b39b366f21717945116",
+                    16,
+                )
+                .unwrap(),
+                U512::from_str_radix(
+                    "10b49c67fa9365ad7b90dab070be339a1daf9052373ec30ffae4f72d5e66d053",
+                    16,
+                )
+                .unwrap(),
+            ),
+        ];
+
+        for (secret, x, y) in points {
+            let point = S256Point::new(x, y);
+            let res = G.rmul(secret);
+            assert_eq!(res, point);
+        }
     }
 }
