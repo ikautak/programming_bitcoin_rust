@@ -1,4 +1,4 @@
-use num_traits::NumOps;
+use num_traits::Num;
 use once_cell::sync::Lazy;
 use primitive_types::U512;
 use std::cmp::PartialEq;
@@ -8,7 +8,7 @@ use std::ops::{Add, Div, Mul, Sub};
 #[derive(Debug, Copy, Clone)]
 pub struct FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     pub num: T,
     pub prime: T,
@@ -16,7 +16,7 @@ where
 
 impl<T> FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     pub fn new(num: T, prime: T) -> Self {
         if num >= prime {
@@ -27,13 +27,12 @@ where
     }
 
     pub fn pow(&mut self, mut exp: T) {
-        let zero = self.prime - self.prime;
-        let one = self.prime / self.prime;
+        let one = T::one();
         let mut result = FieldElement::new(one, self.prime);
 
         exp = exp % (self.prime - one);
 
-        while exp > zero {
+        while exp > T::zero() {
             if exp % (one + one) == one {
                 result = result * *self;
             }
@@ -46,7 +45,7 @@ where
 
 impl<T> PartialEq for FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     fn eq(&self, rhs: &Self) -> bool {
         return self.prime == rhs.prime && self.num == rhs.num;
@@ -55,7 +54,7 @@ where
 
 impl<T> Add for FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
@@ -72,7 +71,7 @@ where
 
 impl<T> Sub for FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
@@ -94,7 +93,7 @@ where
 
 impl<T> Mul for FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
@@ -111,7 +110,7 @@ where
 
 impl<T> Div for FieldElement<T>
 where
-    T: NumOps + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
+    T: Num + std::fmt::Debug + std::cmp::PartialOrd + Clone + Copy,
 {
     type Output = Self;
     fn div(self, rhs: Self) -> Self {
@@ -119,9 +118,8 @@ where
             panic!("Cannot ad two numbers in different Fields");
         }
 
-        let mut other = rhs.clone();
-        let one = self.prime / self.prime;
-        other.pow(self.prime - one - one);
+        let mut other = rhs;
+        other.pow(self.prime - T::one() - T::one());
         self * other
     }
 }
@@ -270,7 +268,7 @@ where
         + PartialEq
         + std::fmt::Debug
         + Copy,
-    U: NumOps + PartialOrd + Copy,
+    U: Num + PartialOrd + Copy,
 {
     type Output = Point<T>;
     fn mul(self, coefficient: U) -> Point<T> {
@@ -278,8 +276,8 @@ where
         let mut current = self;
         let mut result = Point::new(None, None, self.a, self.b);
 
-        let zero = coef - coef;
-        let one = coef / coef; // FIXME
+        let zero = U::zero();
+        let one = U::one();
         let two = one + one;
         while coef > zero {
             if coef % two > zero {
@@ -352,7 +350,6 @@ mod tests {
     use super::Point;
     use super::S256Point;
     use super::G;
-    use super::N;
     use super::U512;
 
     #[test]
