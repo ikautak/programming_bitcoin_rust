@@ -350,6 +350,7 @@ mod tests {
     use super::Point;
     use super::S256Point;
     use super::G;
+    use super::N;
     use super::U512;
 
     #[test]
@@ -576,11 +577,11 @@ mod tests {
         assert_eq!(p1 * s, p2);
     }
 
-    //#[test]
-    //fn test_s256_order() {
-    //    let p = G.rmul(*N);
-    //    assert!(p.point.x == None);
-    //}
+    #[test]
+    fn test_s256_order() {
+        let p = G.rmul(*N);
+        assert!(p.point.x == None);
+    }
 
     #[test]
     fn test_s256_pubpoint() {
