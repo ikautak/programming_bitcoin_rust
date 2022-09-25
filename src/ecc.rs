@@ -1,6 +1,7 @@
 use num_traits::Num;
 use once_cell::sync::Lazy;
 use primitive_types::U512;
+use rand::Rng;
 use std::cmp::PartialEq;
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
@@ -340,14 +341,14 @@ impl S256Point {
         }
     }
 
-    pub fn verify(&self, z: U512, r: U512, s: U512) -> bool {
+    pub fn verify(&self, z: U512, sig: Signature) -> bool {
         let n = *N;
-        let s_inv = modpow(s, n - 2, n);
+        let s_inv = modpow(sig.s, n - 2, n);
 
         let u = z * s_inv % n;
-        let v = r * s_inv % n;
+        let v = sig.r * s_inv % n;
         let total = G.rmul(u).point + self.rmul(v).point;
-        total.x.unwrap().num == r
+        total.x.unwrap().num == sig.r
     }
 }
 
@@ -372,11 +373,54 @@ static GY: Lazy<U512> = Lazy::new(|| {
     .unwrap()
 });
 static G: Lazy<S256Point> = Lazy::new(|| S256Point::new(*GX, *GY));
+
+#[derive(Debug, Copy, Clone)]
+pub struct Signature {
+    r: U512,
+    s: U512,
+}
+
+impl Signature {
+    pub fn new(r: U512, s: U512) -> Self {
+        Self { r, s }
+    }
+}
+
+pub struct PrivateKey {
+    pub secret: U512,
+    pub point: S256Point,
+}
+
+impl PrivateKey {
+    pub fn new(z: U512) -> Self {
+        Self {
+            secret: z,
+            point: G.rmul(z),
+        }
+    }
+
+    pub fn sign(&self, z: U512) -> Signature {
+        let k: u32 = rand::thread_rng().gen(); // FIXME
+        let k = U512::from(k);
+        let r = G.rmul(k).point.x.unwrap().num;
+        let n = *N;
+        let k_inv = modpow(k, n - 2, n);
+        let mut s = (z + r * self.secret % n) * k_inv % n;
+        if s > n / 2 {
+            s = n - s;
+        }
+        Signature { r, s }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::FieldElement;
     use super::Point;
+    use super::PrivateKey;
+    use super::Rng;
     use super::S256Point;
+    use super::Signature;
     use super::G;
     use super::N;
     use super::U512;
@@ -711,7 +755,8 @@ mod tests {
             16,
         )
         .unwrap();
-        assert!(p.verify(z, r, s));
+        let sig = Signature::new(r, s);
+        assert!(p.verify(z, sig));
 
         let z = U512::from_str_radix(
             "7c076ff316692a3d7eb3c3bb0f8b1488cf72e1afcd929e29307032997a838a3d",
@@ -728,6 +773,18 @@ mod tests {
             16,
         )
         .unwrap();
-        assert!(p.verify(z, r, s));
+        let sig = Signature::new(r, s);
+        assert!(p.verify(z, sig));
+    }
+
+    #[test]
+    fn test_sign() {
+        let rnd: u32 = rand::thread_rng().gen();
+        let pk = PrivateKey::new(U512::from(rnd));
+
+        let rnd: u32 = rand::thread_rng().gen();
+        let z = U512::from(rnd);
+        let sig = pk.sign(z);
+        assert!(pk.point.verify(z, sig));
     }
 }
