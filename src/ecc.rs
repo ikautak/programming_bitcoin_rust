@@ -1,3 +1,5 @@
+//! programming-bitcoin
+//! ecc.py
 use num_traits::Num;
 use once_cell::sync::Lazy;
 use primitive_types::U512;
@@ -298,12 +300,15 @@ static P: Lazy<U512> =
 static N: Lazy<U512> =
     Lazy::new(|| U512::from(r"0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141"));
 
+/// It's actually 256bit data, but use U512 for simplify calculation.
 type S256Field = FieldElement<U512>;
+
 #[derive(Debug)]
 pub struct S256Point {
     pub point: Point<S256Field>,
 }
 
+/// x to the power exp, modulo m
 pub fn modpow<T>(mut x: T, mut exp: T, m: T) -> T
 where
     T: Num + PartialOrd + Copy,
@@ -334,7 +339,7 @@ impl S256Point {
         }
     }
 
-    pub fn rmul(&self, coefficient: U512) -> Self {
+    pub fn mul(&self, coefficient: U512) -> Self {
         let coef = coefficient % *N;
         Self {
             point: self.point * coef,
@@ -347,7 +352,7 @@ impl S256Point {
 
         let u = z * s_inv % n;
         let v = sig.r * s_inv % n;
-        let total = G.rmul(u).point + self.rmul(v).point;
+        let total = G.mul(u).point + self.mul(v).point;
         total.x.unwrap().num == sig.r
     }
 }
@@ -395,14 +400,14 @@ impl PrivateKey {
     pub fn new(z: U512) -> Self {
         Self {
             secret: z,
-            point: G.rmul(z),
+            point: G.mul(z),
         }
     }
 
     pub fn sign(&self, z: U512) -> Signature {
         let k: u32 = rand::thread_rng().gen(); // FIXME
         let k = U512::from(k);
-        let r = G.rmul(k).point.x.unwrap().num;
+        let r = G.mul(k).point.x.unwrap().num;
         let n = *N;
         let k_inv = modpow(k, n - 2, n);
         let mut s = (z + r * self.secret % n) * k_inv % n;
@@ -651,7 +656,7 @@ mod tests {
 
     #[test]
     fn test_s256_order() {
-        let p = G.rmul(*N);
+        let p = G.mul(*N);
         assert!(p.point.x == None);
     }
 
@@ -720,7 +725,7 @@ mod tests {
 
         for (secret, x, y) in points {
             let point = S256Point::new(x, y);
-            let res = G.rmul(secret);
+            let res = G.mul(secret);
             assert_eq!(res, point);
         }
     }
