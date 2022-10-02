@@ -355,6 +355,56 @@ impl S256Point {
         let total = G.mul(u).point + self.mul(v).point;
         total.x.unwrap().num == sig.r
     }
+
+    pub fn sec(&self, compressed: bool) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        if compressed {
+            if self.point.y.unwrap().num % 2 == U512::zero() {
+                out.push(0x02u8);
+            } else {
+                out.push(0x03u8);
+            }
+
+            let mut big_endian_bytes = [0u8; 64];
+            self.point
+                .x
+                .unwrap()
+                .num
+                .to_big_endian(&mut big_endian_bytes);
+
+            for i in 32..64 {
+                out.push(big_endian_bytes[i]);
+            }
+
+            out
+        } else {
+            let mut big_endian_bytes_x = [0u8; 64];
+            let mut big_endian_bytes_y = [0u8; 64];
+            self.point
+                .x
+                .unwrap()
+                .num
+                .to_big_endian(&mut big_endian_bytes_x);
+            self.point
+                .y
+                .unwrap()
+                .num
+                .to_big_endian(&mut big_endian_bytes_y);
+            println!("{:?}", big_endian_bytes_x);
+
+            out.push(0x04u8);
+
+            for i in 32..64 {
+                out.push(big_endian_bytes_x[i]);
+            }
+            for i in 32..64 {
+                out.push(big_endian_bytes_y[i]);
+            }
+
+            out
+        }
+    }
 }
 
 impl PartialEq for S256Point {
@@ -780,6 +830,51 @@ mod tests {
         .unwrap();
         let sig = Signature::new(r, s);
         assert!(p.verify(z, sig));
+    }
+
+    #[test]
+    fn test_s256_sec() {
+        // case 1
+        let coefficient = U512::from(999u32).pow(U512::from(3u32));
+        let point = G.mul(coefficient);
+
+        let sec = point.sec(false);
+        let uncompressed = "049d5ca49670cbe4c3bfa84c96a8c87df086c6ea6a24ba6b809c9de234496808d56fa15cc7f3d38cda98dee2419f415b7513dde1301f8643cd9245aea7f3f911f9";
+        let uncompressed = hex::decode(uncompressed).unwrap();
+        assert_eq!(sec, uncompressed);
+
+        let sec = point.sec(true);
+        let compressed = "039d5ca49670cbe4c3bfa84c96a8c87df086c6ea6a24ba6b809c9de234496808d5";
+        let compressed = hex::decode(compressed).unwrap();
+        assert_eq!(sec, compressed);
+
+        // case 2
+        let coefficient = U512::from(123u32);
+        let point = G.mul(coefficient);
+
+        let sec = point.sec(false);
+        let uncompressed = "04a598a8030da6d86c6bc7f2f5144ea549d28211ea58faa70ebf4c1e665c1fe9b5204b5d6f84822c307e4b4a7140737aec23fc63b65b35f86a10026dbd2d864e6b";
+        let uncompressed = hex::decode(uncompressed).unwrap();
+        assert_eq!(sec, uncompressed);
+
+        let sec = point.sec(true);
+        let compressed = "03a598a8030da6d86c6bc7f2f5144ea549d28211ea58faa70ebf4c1e665c1fe9b5";
+        let compressed = hex::decode(compressed).unwrap();
+        assert_eq!(sec, compressed);
+
+        // case 3
+        let coefficient = U512::from(42424242u32);
+        let point = G.mul(coefficient);
+
+        let sec = point.sec(false);
+        let uncompressed = "04aee2e7d843f7430097859e2bc603abcc3274ff8169c1a469fee0f20614066f8e21ec53f40efac47ac1c5211b2123527e0e9b57ede790c4da1e72c91fb7da54a3";
+        let uncompressed = hex::decode(uncompressed).unwrap();
+        assert_eq!(sec, uncompressed);
+
+        let sec = point.sec(true);
+        let compressed = "03aee2e7d843f7430097859e2bc603abcc3274ff8169c1a469fee0f20614066f8e";
+        let compressed = hex::decode(compressed).unwrap();
+        assert_eq!(sec, compressed);
     }
 
     #[test]
