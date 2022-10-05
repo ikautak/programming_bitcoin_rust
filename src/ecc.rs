@@ -481,6 +481,115 @@ impl Signature {
     pub fn new(r: U512, s: U512) -> Self {
         Self { r, s }
     }
+
+    pub fn der(&self) -> Vec<u8> {
+        // r
+        let mut r_bytes = [0u8; 64];
+        self.r.to_big_endian(&mut r_bytes);
+        println!("r {:?}", r_bytes);
+
+        let mut r_bin = Vec::<u8>::new();
+        for i in 32..64 {
+            r_bin.push(r_bytes[i]);
+        }
+        println!("2 {:?}", r_bin);
+
+        while r_bin[0] == 0x00 {
+            r_bin.remove(0);
+        }
+        println!("3 {:?}", r_bin);
+
+        if r_bin[0] & 0x80 > 0 {
+            r_bin.insert(0, 0x00);
+        }
+        println!("4 {:?}", r_bin);
+
+        let mut result: Vec<u8> = vec![0x2];
+        let r_len = u8::try_from(r_bin.len()).unwrap();
+        result.push(r_len);
+        result.append(&mut r_bin);
+        println!("result {:?}", result);
+
+        // s
+        let mut s_bytes = [0u8; 64];
+        self.s.to_big_endian(&mut s_bytes);
+        println!("s {:?}", s_bytes);
+
+        let mut s_bin = Vec::<u8>::new();
+        for i in 32..64 {
+            s_bin.push(s_bytes[i]);
+        }
+        println!("2 {:?}", s_bin);
+
+        while s_bin[0] == 0x00 {
+            s_bin.remove(0);
+        }
+        println!("3 {:?}", s_bin);
+
+        if s_bin[0] & 0x80 > 0 {
+            s_bin.insert(0, 0x00);
+        }
+        println!("4 {:?}", s_bin);
+
+        result.push(0x2);
+        let s_len = u8::try_from(s_bin.len()).unwrap();
+        result.push(s_len);
+        result.append(&mut s_bin);
+        println!("result {:?}", result);
+
+        let mut out: Vec<u8> = vec![0x30];
+        let result_len = u8::try_from(result.len()).unwrap();
+        out.push(result_len);
+        out.append(&mut result);
+        println!("{:?}", out);
+        out
+    }
+
+    pub fn parse(der: &Vec<u8>) -> Self {
+        let mut der_bytes = der.clone();
+
+        let marker = der_bytes[0];
+        der_bytes.remove(0);
+        if marker != 0x30 {
+            panic!("bad signature");
+        }
+
+        let length = der_bytes[0];
+        der_bytes.remove(0);
+        if usize::from(length + 2) != der.len() {
+            panic!("bad signature length");
+        }
+
+        let marker = der_bytes[0];
+        der_bytes.remove(0);
+        if marker != 0x02 {
+            panic!("bad signature");
+        }
+
+        let r_length = usize::from(der_bytes[0]);
+        der_bytes.remove(0);
+        let r = &der_bytes[0..r_length];
+        let r = U512::from_big_endian(r);
+
+        let mut der_bytes = der_bytes.split_off(r_length);
+
+        let marker = der_bytes[0];
+        der_bytes.remove(0);
+        if marker != 0x02 {
+            panic!("bad signature");
+        }
+
+        let s_length = usize::from(der_bytes[0]);
+        der_bytes.remove(0);
+        let s = &der_bytes[0..s_length];
+        let s = U512::from_big_endian(s);
+
+        if der.len() != 6 + r_length + s_length {
+            panic!("signature too long");
+        }
+
+        Self::new(r, s)
+    }
 }
 
 pub struct PrivateKey {
@@ -917,6 +1026,24 @@ mod tests {
         let compressed = "03aee2e7d843f7430097859e2bc603abcc3274ff8169c1a469fee0f20614066f8e";
         let compressed = hex::decode(compressed).unwrap();
         assert_eq!(sec, compressed);
+    }
+
+    #[test]
+    fn test_signature_der() {
+        let test_case = vec![
+            (U512::from(1i32), U512::from(2i32)),
+            (U512::from(9999i32), U512::from(19999i32)),
+            (U512::from(189672304i32), U512::from(200457841i32)),
+        ];
+
+        for (r, s) in test_case {
+            let sig = Signature::new(r, s);
+            let der = sig.der();
+
+            let sig2 = Signature::parse(&der);
+            assert_eq!(sig2.r, r);
+            assert_eq!(sig2.s, s);
+        }
     }
 
     #[test]
