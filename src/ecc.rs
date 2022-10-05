@@ -303,6 +303,15 @@ static N: Lazy<U512> =
 /// It's actually 256bit data, but use U512 for simplify calculation.
 type S256Field = FieldElement<U512>;
 
+impl S256Field {
+    pub fn sqrt(&self) -> Self {
+        let p = (*P + U512::one()) / U512::from(4u32);
+        let mut ret = self.clone();
+        ret.pow(p);
+        ret
+    }
+}
+
 #[derive(Debug)]
 pub struct S256Point {
     pub point: Point<S256Field>,
@@ -403,6 +412,39 @@ impl S256Point {
             }
 
             out
+        }
+    }
+
+    pub fn parse(sec_bin: &str) -> Self {
+        let sec_bin = hex::decode(sec_bin).unwrap();
+
+        if sec_bin[0] == 0x4 {
+            // uncompressed
+            let x = U512::from(sec_bin[1..33].as_ref());
+            let y = U512::from(sec_bin[33..65].as_ref());
+            return S256Point::new(x, y);
+        }
+
+        let is_even = sec_bin[0] == 0x2;
+        let mut x = S256Field::new(U512::from_big_endian(sec_bin[1..33].as_ref()), *P);
+        x.pow(U512::from(3u32));
+        let alpha = x + S256Field::new(U512::from(8u32), *P);
+        let beta = alpha.sqrt();
+
+        let even_beta: FieldElement<U512>;
+        let odd_beta: FieldElement<U512>;
+        if beta.num % U512::from(2u32) == U512::zero() {
+            even_beta = beta.clone();
+            odd_beta = S256Field::new(*P - beta.num, *P);
+        } else {
+            even_beta = S256Field::new(*P - beta.num, *P);
+            odd_beta = beta.clone();
+        }
+
+        if is_even {
+            Self::new(x.num, even_beta.num)
+        } else {
+            Self::new(x.num, odd_beta.num)
         }
     }
 }
